@@ -8,7 +8,7 @@ The simulation uses ArduCopter flying in ArduPilot SITL, rendered in Gazebo 11, 
 
 ## Demo
 
-[Watch the demo video](demo.webm) (5 min 13 s, 2560x1440, WebM).
+[Watch the demo video](demo.webm)
 
 ## Components
 
