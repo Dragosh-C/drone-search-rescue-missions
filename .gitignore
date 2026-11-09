@@ -1,0 +1,18 @@
+# Assistant session logs
+.aider*
+
+# Runtime output
+workspace/captured_targets/
+
+# Repositories cloned inside the container (see README, Manual setup)
+workspace/src/
+
+# colcon build output
+workspace/build/
+workspace/install/
+workspace/log/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
