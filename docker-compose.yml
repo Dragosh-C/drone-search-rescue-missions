@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  ros2_gazebo:
+    build: .
+    container_name: ros2_gazebo_dev
+    privileged: true
+    environment:
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ./workspace:/ros2_ws
+      - /dev/dri:/dev/dri
+      - ./app:/app
+    network_mode: host
+    stdin_open: true 
+    tty: true
