@@ -25,9 +25,10 @@ RUN apt-get update && apt-get install -y \
 
 # Detection stack: PyTorch (CPU build), YOLO and its helpers.
 # NumPy must stay below 2 for the ROS cv_bridge package.
-RUN pip3 install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu \
-    && pip3 install --no-cache-dir ultralytics ultralyticsplus \
-    && pip3 install --no-cache-dir "numpy<2"
+# The Ubuntu pip is too old for the resolver and crashes on these pins, so upgrade it first.
+RUN pip3 install --upgrade pip \
+    && pip3 install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu \
+    && pip3 install --no-cache-dir "numpy<2" ultralytics ultralyticsplus
 
 # Install GeographicLib datasets for MAVROS
 RUN wget -O /tmp/install_geographiclib_datasets.sh https://raw.githubusercontent.com/mavlink/mavros/master/mavros/scripts/install_geographiclib_datasets.sh \
