@@ -5,6 +5,9 @@ WINDOW_NAME="swarm"
 
 tmux kill-session -t $SESSION_NAME 2>/dev/null
 
+# Build the container and prepare the workspace once, before any pane starts
+./run.sh --no-shell || exit 1
+
 tmux new-session -d -s $SESSION_NAME -n $WINDOW_NAME
 
 for i in {1..8}; do
@@ -12,10 +15,10 @@ for i in {1..8}; do
     tmux select-layout tiled
 done
 
-echo "Starting Docker containers in all panes..."
+echo "Opening a shell in the container in all panes..."
 
 for i in {0..8}; do
-    tmux send-keys -t "$SESSION_NAME:$WINDOW_NAME.$i" "./run.sh" C-m
+    tmux send-keys -t "$SESSION_NAME:$WINDOW_NAME.$i" "docker exec -it ros2_gazebo_dev bash" C-m
 done
 
 sleep 4 

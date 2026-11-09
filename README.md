@@ -33,96 +33,41 @@ All ROS 2, Gazebo, MAVROS and Python dependencies are installed inside the conta
 
 ## Quick start
 
-1. Build the container and open a shell in it:
+1. Build the container, set up the workspace and open a shell:
 
    ```bash
    ./run.sh
    ```
 
-   This runs `xhost +local:root`, builds the image with `docker-compose up -d --build`, and opens a shell in the container `ros2_gazebo_dev`.
+   The first run takes a long time: it builds the container, clones and builds ArduPilot (a large download), builds the Gazebo plugin and builds the ROS 2 packages. Later runs skip finished steps. See [Setup](#setup).
 
-2. Set up ArduPilot, the Gazebo plugin and the ROS 2 workspace inside the container. This only needs to be done once, because the workspace is mounted from `./workspace` on the host. See [Manual setup](#manual-setup). `run_all.sh` sources `/ros2_ws/install/setup.bash`, which only exists after the `colcon build` step; if it is missing, the panes fail with `No such file or directory`.
-
-3. Start every component in its own tmux pane:
+2. Start every component in its own tmux pane:
 
    ```bash
    ./run_all.sh
    ```
 
-   This creates a tmux session named `drone_swarm_session` with nine panes, starts a container shell in each one, and then starts Gazebo, SITL, MAVROS, the mission nodes, the detectors, rosbridge and the web backend.
+   This runs the same setup step, then creates a tmux session named `drone_swarm_session` with nine panes, opens a container shell in each one, and starts Gazebo, SITL, MAVROS, the mission nodes, the detectors, rosbridge and the web backend.
 
-4. Open the dashboard at `http://localhost:8000`.
+3. Open the dashboard at `http://localhost:8000`.
 
-## Manual setup
+## Setup
 
-These steps are run inside the container, in `/ros2_ws` (the host `./workspace` directory).
+`workspace/setup_workspace.sh` runs inside the container. It is called by `run.sh` and can be re-run safely. Each step is skipped when its output already exists:
 
-### ArduPilot SITL
+1. Installs the system and Python packages not covered by the Dockerfile (Gazebo development files, CycloneDDS, wxPython, MAVProxy and related tools).
+2. Clones ArduPilot `Copter-4.5` with its submodules into `workspace/src/ardupilot`.
+3. Builds the ArduCopter SITL binary with `waf`.
+4. Builds the Gazebo ArduPilot plugin from `workspace/src/ardupilot_gazebo`.
+5. Builds the ROS 2 packages with `colcon` into `workspace/install`.
 
-```bash
-cd /ros2_ws/src
-git clone https://github.com/ArduPilot/ardupilot.git
-cd ardupilot
-git checkout Copter-4.5
-git submodule update --init --recursive
-
-pip3 uninstall -y empy
-pip3 install empy==3.3.4 future
-
-./waf clean
-./waf configure --board sitl
-./waf copter
-```
-
-To test SITL on its own:
+To run it by hand inside the container:
 
 ```bash
-cd /ros2_ws/src/ardupilot/ArduCopter
-../Tools/autotest/sim_vehicle.py -v ArduCopter --console --map
+bash /ros2_ws/setup_workspace.sh
 ```
 
-### Gazebo plugin for ArduPilot
-
-The plugin source is included in `workspace/src/ardupilot_gazebo`, adapted from [khancyr/ardupilot_gazebo](https://github.com/khancyr/ardupilot_gazebo). Build it in place:
-
-```bash
-apt-get update && apt-get install -y libgazebo-dev
-
-cd /ros2_ws/src/ardupilot_gazebo
-mkdir -p build && cd build
-cmake ..
-make -j4
-make install
-```
-
-Add the Gazebo paths to the shell:
-
-```bash
-echo 'export GAZEBO_MODEL_PATH=/ros2_ws/src/ardupilot_gazebo/models:${GAZEBO_MODEL_PATH}' >> ~/.bashrc
-echo 'export GAZEBO_PLUGIN_PATH=/usr/lib/x86_64-linux-gnu/gazebo-11/plugins:/usr/local/lib:${GAZEBO_PLUGIN_PATH}' >> ~/.bashrc
-source ~/.bashrc
-```
-
-### Other dependencies and build
-
-```bash
-apt-get update && apt-get install -y ros-humble-rmw-cyclonedds-cpp
-apt-get update && apt-get install -y python3-opencv python3-wxgtk4.0 python3-matplotlib python3-lxml
-apt-get update && apt-get install -y ros-humble-rosbridge-suite
-
-source /opt/ros/humble/setup.bash
-cd /ros2_ws
-colcon build --symlink-install --packages-ignore ardupilot_sitl
-
-pip3 install pexpect future pymavlink MAVProxy
-ln -s /usr/bin/python3 /usr/bin/python
-```
-
-To rebuild only the mission package after a change:
-
-```bash
-colcon build --packages-select swarm_demo && source install/setup.bash
-```
+The ArduPilot clone and the build output are not tracked in Git (see `.gitignore`).
 
 ### Running the parts by hand
 
@@ -229,6 +174,7 @@ ros2 service call /mavros/cmd/takeoff mavros_msgs/srv/CommandTOL "{altitude: 10.
 │   ├── src/                     Mounted as /ros2_ws/src
 │   │   ├── ardupilot_gazebo/    Gazebo plugin source, worlds and models
 │   │   └── swarm_demo/          ROS 2 package with the mission and detection nodes
+│   └── setup_workspace.sh       One-time workspace setup (run by run.sh)
 ├── Dockerfile
 ├── docker-compose.yml
 ├── entrypoint.sh
