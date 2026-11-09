@@ -26,10 +26,11 @@ RUN apt-get update && apt-get install -y \
 # Detection stack: PyTorch (CPU build), YOLO and its helpers.
 # NumPy must stay below 2 for the ROS cv_bridge package.
 # The Ubuntu pip is too old for the resolver and crashes on these pins, so upgrade it first.
-# --ignore-installed avoids uninstalling distutils-installed packages that pip cannot remove.
+# Ubuntu installs some of these packages with distutils (for example sympy), and pip cannot
+# uninstall them. --ignore-installed makes pip install its own copies alongside them.
 RUN pip3 install --ignore-installed --upgrade pip \
-    && pip3 install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu \
-    && pip3 install --no-cache-dir "numpy<2" ultralytics ultralyticsplus
+    && pip3 install --ignore-installed --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu \
+    && pip3 install --ignore-installed --no-cache-dir "numpy<2" ultralytics ultralyticsplus
 
 # Install GeographicLib datasets for MAVROS
 RUN wget -O /tmp/install_geographiclib_datasets.sh https://raw.githubusercontent.com/mavlink/mavros/master/mavros/scripts/install_geographiclib_datasets.sh \
