@@ -13,19 +13,12 @@ SRC=$WS/src
 
 log() { echo; echo "[setup] $*"; }
 
-# 1. System and Python dependencies (the Dockerfile covers the rest)
-if ! dpkg -s libgazebo-dev >/dev/null 2>&1; then
-    log "Installing Gazebo, CycloneDDS and wxPython packages"
-    apt-get update
-    apt-get install -y libgazebo-dev ros-humble-rmw-cyclonedds-cpp python3-wxgtk4.0
+# 1. Dependencies come from the Dockerfile. Fail early if the image is outdated.
+if ! python3 -c "import torch, ultralyticsplus, cv_bridge" 2>/dev/null; then
+    echo "Python or ROS packages are missing from the image." >&2
+    echo "Rebuild it with: docker-compose up -d --build" >&2
+    exit 1
 fi
-
-if ! pip3 show empy 2>/dev/null | grep -q "^Version: 3.3.4"; then
-    log "Installing empy 3.3.4 (required by ArduPilot)"
-    pip3 uninstall -y empy || true
-    pip3 install empy==3.3.4 future
-fi
-pip3 install pexpect future pymavlink MAVProxy
 
 # 2. ArduPilot source (Copter-4.5), cloned into the mounted workspace
 if [ ! -d "$SRC/ardupilot/.git" ]; then

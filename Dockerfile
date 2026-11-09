@@ -16,7 +16,18 @@ RUN apt-get update && apt-get install -y \
 RUN ln -s /usr/bin/python3 /usr/bin/python
 
 # Install MAVProxy and ArduPilot SITL dependencies
-RUN pip3 install PyYAML mavproxy pexpect future pymavlink
+RUN pip3 install PyYAML mavproxy pexpect future pymavlink empy==3.3.4
+
+# Gazebo development files (for the ArduPilot plugin), CycloneDDS and wxPython
+RUN apt-get update && apt-get install -y \
+    libgazebo-dev ros-humble-rmw-cyclonedds-cpp python3-wxgtk4.0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Detection stack: PyTorch (CPU build), YOLO and its helpers.
+# NumPy must stay below 2 for the ROS cv_bridge package.
+RUN pip3 install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu \
+    && pip3 install --no-cache-dir ultralytics ultralyticsplus \
+    && pip3 install --no-cache-dir "numpy<2"
 
 # Install GeographicLib datasets for MAVROS
 RUN wget -O /tmp/install_geographiclib_datasets.sh https://raw.githubusercontent.com/mavlink/mavros/master/mavros/scripts/install_geographiclib_datasets.sh \
