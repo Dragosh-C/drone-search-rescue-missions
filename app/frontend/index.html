@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Campus Drone GCS - Command Edition</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/eventemitter2@6.4.9/lib/eventemitter2.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/roslib@1/build/roslib.min.js"></script>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+
+    <style>
+        :root {
+            --primary: #007bff;
+            --primary-hover: #0056b3;
+            --bg-color: #f8f9fa;
+            --card-bg: #ffffff;
+            --text-dark: #333;
+            --text-light: #666;
+            --border: #e0e0e0;
+            --success: #28a745;
+            --danger: #dc3545;
+            --warning: #ffc107;
+            --info: #17a2b8;
+        }
+
+        body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; display: flex; height: 100vh; background-color: var(--bg-color); color: var(--text-dark); }
+        #sidebar { width: 380px; padding: 25px; background: var(--card-bg); box-shadow: 2px 0 10px rgba(0,0,0,0.1); z-index: 1000; display: flex; flex-direction: column; gap: 15px; overflow-y: auto; }
+        #map { flex-grow: 1; height: 100%; z-index: 1; cursor: default; }
+
+        h2 { margin-top: 0; color: var(--text-dark); font-size: 24px; border-bottom: 2px solid var(--primary); padding-bottom: 10px; }
+        h3 { font-size: 16px; margin: 0 0 10px 0; color: var(--text-dark); display: flex; justify-content: space-between; align-items: center;}
+
+        .card { background: var(--bg-color); padding: 15px; border-radius: 8px; border: 1px solid var(--border); }
+
+        .status-box { padding: 12px; text-align: center; font-weight: bold; background: #ffebee; color: #c62828; border-radius: 6px; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.3s ease; }
+        .status-box.connected { background: #e8f5e9; color: #2e7d32; }
+        .status-dot { height: 10px; width: 10px; background-color: #c62828; border-radius: 50%; display: inline-block; }
+        .connected .status-dot { background-color: #2e7d32; box-shadow: 0 0 8px #2e7d32; }
+
+        button { width: 100%; padding: 14px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold; transition: background 0.2s; }
+        button:hover { background: var(--primary-hover); }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        
+        button.secondary { background: #6c757d; margin-top: 10px; padding: 10px;}
+        button.secondary:hover { background: #5a6268; }
+        
+        /* Specific Button Colors */
+        .btn-green { background: var(--success) !important; }
+        .btn-red { background: var(--danger) !important; }
+        .btn-cyan { background: var(--info) !important; }
+        .btn-yellow { background: var(--warning) !important; color: #000 !important; }
+
+        .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+
+        .input-group { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; }
+        input[type="number"] { padding: 8px; border: 1px solid var(--border); border-radius: 4px; width: 60px; text-align: center; }
+
+        .checkbox-group { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+        .checkbox-row { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 500; }
+        .checkbox-row input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
+
+        .telem-data { font-family: monospace; font-size: 14px; color: var(--text-light); }
+        .telem-row { display: flex; justify-content: space-between; border-bottom: 1px dashed var(--border); padding: 4px 0; }
+        .telem-row:last-child { border-bottom: none; }
+        
+        #target-feed-box { max-height: 140px; overflow-y: auto; border: 1px solid var(--border); background: #fff; border-radius: 4px; padding: 5px; margin-top: 10px; }
+        .target-log-item { font-size: 11px; font-family: monospace; padding: 4px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; }
+        .target-log-item:last-child { border-bottom: none; }
+
+        .badge { padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; color: white; background: #6c757d; }
+        .badge.active { background: var(--success); }
+        .badge.danger { background: var(--danger); }
+        .badge.warning { background: var(--warning); color: #333; }
+    </style>
+</head>
+<body>
+
+    <div id="sidebar">
+        <h2>Campus GCS</h2>
+        
+        <div id="status" class="status-box">
+            <span class="status-dot"></span> <span id="status-text">Disconnected from ROS</span>
+        </div>
+
+        <div class="card">
+            <h3>Flight Controls</h3>
+            <div class="btn-grid">
+                <button class="secondary btn-green" onclick="sendDroneCommand('ARM')">Enable Motors</button>
+                <button class="secondary btn-red" onclick="sendDroneCommand('DISARM')">Kill Motors</button>
+                <button class="secondary btn-cyan" onclick="sendDroneCommand('TAKEOFF')">Takeoff</button>
+                <button class="secondary btn-yellow" onclick="sendDroneCommand('RTL')">Go Home</button>
+            </div>
+            <button class="secondary" id="setHomeBtn" onclick="toggleSetHomeMode()" style="margin-top: 5px;">Set Custom Home on Map</button>
+        </div>
+        
+        <div class="card">
+            <h3>Target Selection</h3>
+            <div class="checkbox-group">
+                <strong style="font-size: 13px; color: #333;">AI Objects detection</strong>
+                <div class="checkbox-row">
+                    <input type="checkbox" id="hunt-person" checked onchange="updateTargetConfig()">
+                    <label for="hunt-person" style="color: #8d8400;">Humans</label>
+                </div>
+                <div class="checkbox-row">
+                    <input type="checkbox" id="hunt-vehicle" checked onchange="updateTargetConfig()">
+                    <label for="hunt-vehicle" style="color: #c51be7;">Vehicles</label>
+                </div>
+                
+                <hr style="border: 0; border-top: 1px solid #eee; width: 100%; margin: 5px 0;">
+                
+                <strong style="font-size: 13px; color: #333;">Color Signatures</strong>
+                <div class="checkbox-row">
+                    <input type="checkbox" id="hunt-red" checked onchange="updateTargetConfig()">
+                    <label for="hunt-red" style="color: #c62828;">🔴 Red/Orange Targets</label>
+                </div>
+                <div class="checkbox-row">
+                    <input type="checkbox" id="hunt-blue" checked onchange="updateTargetConfig()">
+                    <label for="hunt-blue" style="color: #1565c0;">🔵 Blue Targets</label>
+                </div>
+                <div class="checkbox-row">
+                    <input type="checkbox" id="hunt-green" checked onchange="updateTargetConfig()">
+                    <label for="hunt-green" style="color: #2e7d32;">🟢 Green/Yellow Targets</label>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Mission Planning</h3>
+            <div class="input-group">
+                <label><strong>Scan Spacing (m):</strong></label>
+                <input type="number" id="spacing" value="5" min="1">
+            </div>
+            <div class="input-group">
+                <label><strong>Altitude (m):</strong></label>
+                <input type="number" id="altitude" value="20" min="1">
+            </div>
+            <div id="math-output" style="margin-top: 12px; font-size: 13px; color: var(--text-light);">
+                <em>Draw a zone to see calculated coordinates...</em>
+            </div>
+        </div>
+        <button id="scanBtn" onclick="sendScanCommand()" disabled>▶ Start Area Scan</button>
+
+        <div class="card" style="border: 1px solid #ffeeba; background-color: #fff3cd;">
+            <h3>Target Acquisition Feed <span id="target-count-badge" class="badge danger">FOUND: 0</span></h3>
+            <div id="target-feed-box">
+                <div style="color: #856404; font-size: 12px; text-align: center; padding: 10px; font-style: italic;">
+                    No operational hits registered yet...
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Flight Diagnostics</h3>
+            <div class="telem-data">
+                <div class="telem-row"><span>Flight Mode:</span> <span id="t-mode" class="badge">UNKNOWN</span></div>
+                <div class="telem-row"><span>Arm State:</span> <span id="t-armed" class="badge danger">DISARMED</span></div>
+                <div class="telem-row"><span>Speed:</span> <span id="t-speed">0.0 m/s</span></div>
+                <div class="telem-row"><span>Latitude:</span> <span id="t-lat">Waiting...</span></div>
+                <div class="telem-row"><span>Longitude:</span> <span id="t-lon">Waiting...</span></div>
+                <div class="telem-row"><span>Altitude:</span> <span id="t-alt">Waiting...</span></div>
+            </div>
+            <button class="secondary" onclick="locateDrone()">Center Map on Drone</button>
+        </div>
+    </div>
+
+    <div id="map"></div>
+
+    <script>
+        //  SETUP ROS CONNECTION ---
+        var ros = new ROSLIB.Ros({ url : 'ws://127.0.0.1:9090' });
+        var scanTopic = new ROSLIB.Topic({ ros: ros, name: '/webapp/scan_zone', messageType: 'std_msgs/String' });
+        var configTopic = new ROSLIB.Topic({ ros: ros, name: '/search_and_rescue/target_config', messageType: 'std_msgs/String' });
+        
+        //Drone Command Topic
+        var commandTopic = new ROSLIB.Topic({ ros: ros, name: '/webapp/drone_command', messageType: 'std_msgs/String' });
+
+        ros.on('connection', function() {
+            document.getElementById("status").classList.add("connected");
+            document.getElementById("status-text").innerHTML = "Connected to ROS";
+            updateTargetConfig(); 
+        });
+        ros.on('error', function(error) { console.log('Error:', error); });
+        ros.on('close', function() {
+            document.getElementById("status").classList.remove("connected");
+            document.getElementById("status-text").innerHTML = "Disconnected from ROS";
+        });
+
+        // SETUP LEAFLET MAP & HOME VARIABLES ---
+        let HOME_LAT = 44.435720; 
+        let HOME_LON = 26.047583;
+        let latestDroneLat = HOME_LAT;
+        let latestDroneLon = HOME_LON;
+
+        var map = L.map('map').setView([HOME_LAT, HOME_LON], 18); 
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Tiles © Esri', maxZoom: 20
+        }).addTo(map);
+
+        // Drone Icon
+        const droneTriangleIcon = L.divIcon({
+            html: '<svg width="20" height="20" viewBox="0 0 24 24"><polygon points="12,2 22,22 2,22" fill="#007bff" stroke="white" stroke-width="2"/></svg>',
+            className: '', iconSize: [20, 20], iconAnchor: [12, 12] 
+        });
+        var droneMarker = L.marker([HOME_LAT, HOME_LON], { icon: droneTriangleIcon }).addTo(map).bindPopup("UAV Position");
+
+        // Visual Home Location Marker
+        var homeMarker = L.circleMarker([HOME_LAT, HOME_LON], {
+            color: '#ffc107', fillColor: '#ffc107', fillOpacity: 0.8, radius: 8, weight: 2
+        }).addTo(map).bindPopup("<b>Home Location (H)</b>");
+
+        let isSettingHome = false;
+
+        function toggleSetHomeMode() {
+            isSettingHome = !isSettingHome;
+            let btn = document.getElementById("setHomeBtn");
+            if (isSettingHome) {
+                btn.style.backgroundColor = "#28a745";
+                btn.innerText = "Click exactly where on map...";
+                document.getElementById('map').style.cursor = 'crosshair';
+            } else {
+                btn.style.backgroundColor = "#6c757d";
+                btn.innerText = "Set Custom Home on Map";
+                document.getElementById('map').style.cursor = '';
+            }
+        }
+
+        map.on('click', function(e) {
+            if (isSettingHome) {
+                HOME_LAT = e.latlng.lat;
+                HOME_LON = e.latlng.lng;
+                
+                // Move the yellow dot
+                homeMarker.setLatLng([HOME_LAT, HOME_LON]);
+                homeMarker.openPopup();
+                
+                // Exit Set Home Mode
+                toggleSetHomeMode();
+                console.log("New Home Saved:", HOME_LAT, HOME_LON);
+            }
+        });
+
+        // FLIGHT COMMAND SENDER 
+        function sendDroneCommand(commandString) {
+            let payload = { command: commandString };
+            var msg = new ROSLIB.Message({ data: JSON.stringify(payload) });
+            commandTopic.publish(msg);
+            console.log("Published Command to Python:", commandString);
+        }
+
+        // ELEMETRY SUBSCRIBERS
+        let homeAltitude = null;
+        var telemetryTopic = new ROSLIB.Topic({ ros : ros, name : '/mavros/global_position/global', messageType : 'sensor_msgs/msg/NavSatFix' });
+        telemetryTopic.subscribe(function(message) {
+            latestDroneLat = message.latitude;
+            latestDroneLon = message.longitude;
+            droneMarker.setLatLng([latestDroneLat, latestDroneLon]);
+            document.getElementById("t-lat").innerText = message.latitude.toFixed(6);
+            document.getElementById("t-lon").innerText = message.longitude.toFixed(6);
+
+            if (homeAltitude === null && message.altitude !== 0) { homeAltitude = message.altitude; }
+            // if (homeAltitude !== null) {
+            //     document.getElementById("t-alt").innerText = (message.altitude - homeAltitude).toFixed(1) + " m";
+            // }
+        });
+
+        var altTopic = new ROSLIB.Topic({ 
+            ros: ros, 
+            name: '/mavros/global_position/rel_alt', 
+            messageType: 'std_msgs/msg/Float64' 
+        });
+
+        altTopic.subscribe(function(message) {
+            document.getElementById("t-alt").innerText = message.data.toFixed(1) + " m";
+        });
+
+        var stateTopic = new ROSLIB.Topic({ ros: ros, name: '/mavros/state', messageType: 'mavros_msgs/msg/State' });
+        stateTopic.subscribe(function(message) {
+            let modeBadge = document.getElementById("t-mode");
+            modeBadge.innerText = message.mode;
+            modeBadge.className = (message.mode === "GUIDED" || message.mode === "AUTO") ? "badge active" : "badge warning";
+            let armBadge = document.getElementById("t-armed");
+            armBadge.innerText = message.armed ? "ARMED" : "DISARMED";
+            armBadge.className = message.armed ? "badge active" : "badge danger";
+        });
+
+        var vfrTopic = new ROSLIB.Topic({ ros: ros, name: '/mavros/vfr_hud', messageType: 'mavros_msgs/msg/VfrHud' });
+        vfrTopic.subscribe(function(message) {
+            document.getElementById("t-speed").innerText = message.groundspeed.toFixed(1) + " m/s";
+        });
+
+        //TARGET MONITOR
+        var targetTopic = new ROSLIB.Topic({ ros: ros, name: '/search_and_rescue/target_found', messageType: 'std_msgs/String' });
+        let totalDiscoveredTargets = 0;
+
+        targetTopic.subscribe(function(message) {
+            try {
+                let targetData = JSON.parse(message.data);
+                if (totalDiscoveredTargets === 0) document.getElementById("target-feed-box").innerHTML = "";
+                totalDiscoveredTargets += 1;
+                
+                let counterBadge = document.getElementById("target-count-badge");
+                counterBadge.innerText = `FOUND: ${totalDiscoveredTargets}`;
+                counterBadge.className = "badge active";
+
+                let hexColor = "#ff0000"; 
+                if (targetData.type.includes("VEHICLE")) hexColor = "#c51be7";
+                if (targetData.type.includes("PERSON")) hexColor = "#8d8400";
+                if (targetData.type.includes("Blue Target")) hexColor = "#1565c0";
+                if (targetData.type.includes("Green")) hexColor = "#2e7d32";
+                if (targetData.type.includes("Red")) hexColor = "#c62828";
+
+                let displayName = targetData.type.replace("AI: ", "");
+
+                let logRow = document.createElement("div");
+                logRow.className = "target-log-item";
+                logRow.innerHTML = `<span style="color: ${hexColor}; font-weight:bold;">#${targetData.id} [${displayName}]</span> <span>${targetData.latitude.toFixed(5)}, ${targetData.longitude.toFixed(5)}</span>`;
+                let feedBox = document.getElementById("target-feed-box");
+                feedBox.appendChild(logRow);
+                feedBox.scrollTop = feedBox.scrollHeight;
+
+                let imageHtml = "";
+                if (targetData.image && targetData.image !== "none") {
+                    imageHtml = `<br><img src="http://localhost:8000/${targetData.image}" style="width: 250px; margin-top: 10px; border-radius: 4px; border: 1px solid #ccc;">`;
+                }
+
+                let targetMarker = L.circleMarker([targetData.latitude, targetData.longitude], {
+                    color: '#ffffff', fillColor: hexColor, fillOpacity: 0.8, radius: 9, weight: 2
+                }).addTo(map);
+
+                targetMarker.bindPopup(`<b>DISCOVERED SIGNATURE #${targetData.id}</b><br>
+                                       Type: ${displayName}<br>Lat: ${targetData.latitude.toFixed(6)}<br>
+                                       Lon: ${targetData.longitude.toFixed(6)}${imageHtml}`);
+            } catch(e) { console.error("Error payload", e); }
+        });
+
+        function updateTargetConfig() {
+            let activeFilters = [];
+            if (document.getElementById("hunt-person").checked) activeFilters.push("PERSON");
+            if (document.getElementById("hunt-vehicle").checked) activeFilters.push("VEHICLE");
+            if (document.getElementById("hunt-red").checked) activeFilters.push("Red/Orange Target");
+            if (document.getElementById("hunt-blue").checked) activeFilters.push("Blue Target");
+            if (document.getElementById("hunt-green").checked) activeFilters.push("Green/Yellow Target");
+            configTopic.publish(new ROSLIB.Message({ data: JSON.stringify(activeFilters) }));
+        }
+
+        function locateDrone() { map.flyTo([latestDroneLat, latestDroneLon], 19); droneMarker.openPopup(); }
+
+        //DRAWING TOOLS
+        var drawnItems = new L.FeatureGroup();
+        map.addLayer(drawnItems);
+        var drawControl = new L.Control.Draw({
+            draw: { polyline: false, polygon: false, circle: false, marker: false, circlemarker: false, rectangle: { shapeOptions: { color: '#007bff', weight: 3, fillOpacity: 0.2 } } },
+            edit: { featureGroup: drawnItems }
+        });
+        map.addControl(drawControl);
+
+        var currentPayload = null;
+
+        function latLonToMeters(lat, lon) {
+            const R = 6378137; 
+            const dLat = (lat - HOME_LAT) * Math.PI / 180;
+            const dLon = (lon - HOME_LON) * Math.PI / 180;
+            const y = dLat * R; 
+            const x = dLon * R * Math.cos(HOME_LAT * Math.PI / 180); 
+            return { x: x, y: y };
+        }
+
+        map.on(L.Draw.Event.CREATED, function (e) {
+            drawnItems.clearLayers(); 
+            var layer = e.layer;
+            drawnItems.addLayer(layer);
+
+            var bounds = layer.getBounds();
+            var swMeters = latLonToMeters(bounds.getSouthWest().lat, bounds.getSouthWest().lng);
+            var neMeters = latLonToMeters(bounds.getNorthEast().lat, bounds.getNorthEast().lng);
+
+            var minX = Math.min(swMeters.x, neMeters.x);
+            var maxX = Math.max(swMeters.x, neMeters.x);
+            var minY = Math.min(swMeters.y, neMeters.y);
+            var maxY = Math.max(swMeters.y, neMeters.y);
+
+            currentPayload = {
+                x: minX, y: minY, width: maxX - minX, height: maxY - minY,
+                spacing: parseFloat(document.getElementById('spacing').value),
+                altitude: parseFloat(document.getElementById('altitude').value)
+            };
+
+            document.getElementById("math-output").innerHTML = `<strong>Local Target (Meters from Home):</strong><br>X: ${currentPayload.x.toFixed(1)}m, Y: ${currentPayload.y.toFixed(1)}m<br>Area: ${currentPayload.width.toFixed(1)}m × ${currentPayload.height.toFixed(1)}m`;
+            document.getElementById("scanBtn").disabled = false;
+        });
+
+        function sendScanCommand() {
+            if (!currentPayload) return;
+            currentPayload.spacing = parseFloat(document.getElementById('spacing').value);
+            currentPayload.altitude = parseFloat(document.getElementById('altitude').value);
+            scanTopic.publish(new ROSLIB.Message({ data: JSON.stringify(currentPayload) }));
+            
+            let btn = document.getElementById("scanBtn");
+            btn.innerHTML = "Command Sent!";
+            btn.style.backgroundColor = "#28a745";
+            setTimeout(() => { btn.innerHTML = "Start Area Scan"; btn.style.backgroundColor = ""; }, 2000);
+        }
+    </script>
+</body>
+</html>
