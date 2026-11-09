@@ -13,6 +13,9 @@ SRC=$WS/src
 
 log() { echo; echo "[setup] $*"; }
 
+# ROS must be sourced before importing its Python packages (cv_bridge)
+source /opt/ros/humble/setup.bash
+
 # 1. Dependencies come from the Dockerfile. Fail early if the image is outdated.
 if ! python3 -c "import torch, ultralyticsplus, cv_bridge" 2>/dev/null; then
     echo "Python or ROS packages are missing from the image." >&2
@@ -58,7 +61,6 @@ done
 # 5. ROS 2 packages (swarm_demo)
 if [ ! -f "$WS/install/setup.bash" ]; then
     log "Building ROS 2 packages with colcon"
-    source /opt/ros/humble/setup.bash
     cd "$WS"
     colcon build --symlink-install --packages-ignore ardupilot_sitl
 fi
