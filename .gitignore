@@ -4,13 +4,17 @@
 # Runtime output
 workspace/captured_targets/
 
-# Repositories cloned inside the container (see README, Manual setup)
-workspace/src/
+# ArduPilot source tree cloned into the container (see README, Manual setup)
+workspace/src/ardupilot/
 
-# colcon build output
+# colcon and CMake build output
 workspace/build/
 workspace/install/
 workspace/log/
+workspace/src/build/
+workspace/src/install/
+workspace/src/log/
+workspace/src/*/build/
 
 # Python
 __pycache__/

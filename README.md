@@ -12,8 +12,8 @@ The simulation uses ArduCopter flying in ArduPilot SITL, rendered in Gazebo 11, 
 
 ## Components
 
-- **Gazebo world and models** (`workspace/ardupilot_gazebo`): the sample campus world (a COLMAP reconstruction of the campus), and an Iris quadcopter with the ArduPilot Gazebo plugin.
-- **ROS 2 package `swarm_demo`** (`workspace/swarm_demo`):
+- **Gazebo world and models** (`workspace/src/ardupilot_gazebo`): the sample campus world (a COLMAP reconstruction of the campus), and an Iris quadcopter with the ArduPilot Gazebo plugin.
+- **ROS 2 package `swarm_demo`** (`workspace/src/swarm_demo`):
   - `drone_mission`: receives commands from the web interface (ARM, DISARM, TAKEOFF, RTL) and switches flight modes through MAVROS.
   - `zigzag_mission`: receives a rectangular zone from the web interface, generates a zigzag path at the chosen altitude and spacing, and publishes setpoints.
   - `target_detector`: finds objects by color using HSV thresholding (red/orange, blue and green).
@@ -41,7 +41,7 @@ All ROS 2, Gazebo, MAVROS and Python dependencies are installed inside the conta
 
    This runs `xhost +local:root`, builds the image with `docker-compose up -d --build`, and opens a shell in the container `ros2_gazebo_dev`.
 
-2. Set up ArduPilot, the Gazebo plugin and the ROS 2 workspace inside the container. This only needs to be done once, because the workspace is mounted from `./workspace` on the host. See [Manual setup](#manual-setup).
+2. Set up ArduPilot, the Gazebo plugin and the ROS 2 workspace inside the container. This only needs to be done once, because the workspace is mounted from `./workspace` on the host. See [Manual setup](#manual-setup). `run_all.sh` sources `/ros2_ws/install/setup.bash`, which only exists after the `colcon build` step; if it is missing, the panes fail with `No such file or directory`.
 
 3. Start every component in its own tmux pane:
 
@@ -83,13 +83,13 @@ cd /ros2_ws/src/ardupilot/ArduCopter
 
 ### Gazebo plugin for ArduPilot
 
+The plugin source is included in `workspace/src/ardupilot_gazebo`, adapted from [khancyr/ardupilot_gazebo](https://github.com/khancyr/ardupilot_gazebo). Build it in place:
+
 ```bash
 apt-get update && apt-get install -y libgazebo-dev
 
-cd /ros2_ws/src
-git clone https://github.com/khancyr/ardupilot_gazebo.git
-cd ardupilot_gazebo
-mkdir build && cd build
+cd /ros2_ws/src/ardupilot_gazebo
+mkdir -p build && cd build
 cmake ..
 make -j4
 make install
@@ -226,8 +226,9 @@ ros2 service call /mavros/cmd/takeoff mavros_msgs/srv/CommandTOL "{altitude: 10.
 │   ├── backend/server.py        HTTP server for the dashboard and evidence images
 │   └── frontend/index.html      Ground control station
 ├── workspace/                   Mounted as /ros2_ws in the container
-│   ├── ardupilot_gazebo/        Gazebo worlds and models
-│   └── swarm_demo/              ROS 2 package with the mission and detection nodes
+│   ├── src/                     Mounted as /ros2_ws/src
+│   │   ├── ardupilot_gazebo/    Gazebo plugin source, worlds and models
+│   │   └── swarm_demo/          ROS 2 package with the mission and detection nodes
 ├── Dockerfile
 ├── docker-compose.yml
 ├── entrypoint.sh

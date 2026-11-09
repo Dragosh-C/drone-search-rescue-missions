@@ -13,13 +13,13 @@ class DroneController(Node):
         super().__init__('drone_mission_node')
         self.state = State()
         
-        # Listen to Drone State
+        # 1. Listen to Drone State
         self.state_sub = self.create_subscription(State, '/mavros/state', self.state_cb, 10)
         
-        # Listen to Web Dashboard Commands!
+        # 2. NEW: Listen to Web Dashboard Commands!
         self.cmd_sub = self.create_subscription(String, '/webapp/drone_command', self.command_cb, 10)
         
-        # MAVROS Service Clients
+        # 3. MAVROS Service Clients
         self.mode_cli = self.create_client(SetMode, '/mavros/set_mode')
         self.arm_cli = self.create_client(CommandBool, '/mavros/cmd/arming')
         self.takeoff_cli = self.create_client(CommandTOL, '/mavros/cmd/takeoff')
